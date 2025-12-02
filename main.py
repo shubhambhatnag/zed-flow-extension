@@ -57,7 +57,7 @@ class ZedWorkspaceSearch(FlowLauncher):
                 {
                     "Title": "No Zed workspaces found",
                     "SubTitle": str(ZED_DB_PATH),
-                    "IcoPath": "Images/zed.png",
+                    "IcoPath": "assets/zed.png",
                 }
             ]
 
@@ -121,7 +121,7 @@ class ZedWorkspaceSearch(FlowLauncher):
             {
                 "Title": f"Open in Zed {label}",
                 "SubTitle": path,
-                "IcoPath": "Images/zed.png",
+                "IcoPath": "assets/zed.png",
                 "JsonRPCAction": {
                     "method": "open_in_zed",
                     "parameters": [path],
