@@ -5,7 +5,7 @@
   "Name": "Zed Workspace Plugin",
   "Description": "idk",
   "Author": "Shubham Bhatnagar",
-  "Version": "0.2",
+  "Version": "0.3",
   "Language": "python",
   "Website": "https://github.com/shubhambhatnag",
   "ExecuteFileName": "./test.py",

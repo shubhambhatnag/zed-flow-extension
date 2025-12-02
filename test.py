@@ -43,3 +43,7 @@ class HelloWorld(FlowLauncher):
                 },
             }
         ]
+
+
+if __name__ == "__main__":
+    HelloWorld()
