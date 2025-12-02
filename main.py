@@ -2,7 +2,7 @@ import sqlite3
 import subprocess
 import sys
 import webbrowser
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from flowlauncher import FlowLauncher
 
@@ -19,22 +19,14 @@ def is_wsl_path(p: str) -> bool:
     return p.startswith("/home/") or p.startswith("/mnt/")
 
 
-def normalize_path_for_dedupe(p: str) -> str:
-    """
-    Normalize paths so small differences don't create duplicates:
-    - convert backslashes to slashes
-    - remove trailing slashes
-    - collapse duplicate slashes
-    - lowercase for stable comparison
-    NOTE: We do NOT call Path.resolve() because the path may not exist.
-    """
+def normalize(p: str) -> str:
     if not isinstance(p, str):
         return ""
     s = p.replace("\\", "/")
-    # collapse multiple slashes
+
     while "//" in s:
         s = s.replace("//", "/")
-    # strip trailing slash (but keep root '/')
+
     if len(s) > 1 and s.endswith("/"):
         s = s.rstrip("/")
     return s.lower()
@@ -53,16 +45,15 @@ class ZedWorkspaceSearch(FlowLauncher):
             rows = cur.fetchall()
             con.close()
 
-            # Deduplicate by normalized path first (most robust)
             by_normalized = {}
-            # Also keep a fallback by workspace_id (shortest path)
+
             by_workspace_id = {}
 
             for wid, path in rows:
                 if not path or not isinstance(path, str):
                     continue
 
-                norm = normalize_path_for_dedupe(path)
+                norm = normalize(path)
 
                 # If we've already seen this normalized path, prefer the earliest record
                 if norm not in by_normalized:
@@ -73,7 +64,6 @@ class ZedWorkspaceSearch(FlowLauncher):
                         "is_wsl": is_wsl_path(path),
                     }
                 else:
-                    # keep the shortest 'path' string for readability (prefer root-like)
                     existing = by_normalized[norm]["path"]
                     if len(path) < len(existing):
                         by_normalized[norm] = {
@@ -94,14 +84,14 @@ class ZedWorkspaceSearch(FlowLauncher):
                         "is_wsl": is_wsl_path(path),
                     }
 
-            # Prefer the normalized-set (unique paths). If normalized list empty, fallback to workspace ids
+            # Prefer the normalized-set
             results = (
                 list(by_normalized.values())
                 if by_normalized
                 else list(by_workspace_id.values())
             )
 
-            # Sort results by folder name (stable)
+            # Sort results
             results.sort(key=lambda r: Path(r["path"]).name.lower())
 
             return results
@@ -153,7 +143,6 @@ class ZedWorkspaceSearch(FlowLauncher):
                 }
             )
 
-        # Final defensive dedupe by Title+SubTitle
         unique = []
         seen = set()
         for r in results:
@@ -165,8 +154,6 @@ class ZedWorkspaceSearch(FlowLauncher):
         return unique
 
     def open_workspace(self, path):
-        """Open workspace respecting Windows vs WSL."""
-
         if is_wsl_path(path):
             # Open inside WSL
             subprocess.Popen(
