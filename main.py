@@ -1,4 +1,5 @@
 import sqlite3
+import subprocess
 import sys
 import webbrowser
 from pathlib import Path
@@ -82,8 +83,8 @@ class ZedWorkspaceSearch(FlowLauncher):
         path = Path(path)
         if path.exists():
             # Open Zed directly?
-            # os.system(f'zed "{path}"')     # if zed.exe is in PATH
-            webbrowser.open(path.as_uri())
+            subprocess.Popen(["zed", path], shell=True)  # if zed.exe is in PATH
+
         else:
             webbrowser.open("file:///")  # fallback
 
@@ -104,7 +105,6 @@ class ZedWorkspaceSearch(FlowLauncher):
 
     def open_in_zed(self, path):
         """Open workspace directly in Zed."""
-        import subprocess
 
         subprocess.Popen(["zed", path], shell=True)
 
