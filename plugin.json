@@ -1,6 +1,6 @@
 {
   "$schema": "https://www.flowlauncher.com/schemas/plugin.schema.json",
-  "ID": "7f3c9e12b4a847c6ad0f21e8c5b9d034",
+  "ID": "91a89d52b8bd4a1ebfde9d09b7b5803b",
   "ActionKeywords": ["z"],
   "Name": "Zed Workspaces",
   "Description": "Allows search for Zed workspaces, locally or on WSL.",
