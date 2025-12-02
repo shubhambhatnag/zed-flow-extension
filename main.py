@@ -2,7 +2,7 @@ import sqlite3
 import subprocess
 import sys
 import webbrowser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from flowlauncher import FlowLauncher
 
@@ -19,6 +19,27 @@ def is_wsl_path(p: str) -> bool:
     return p.startswith("/home/") or p.startswith("/mnt/")
 
 
+def normalize_path_for_dedupe(p: str) -> str:
+    """
+    Normalize paths so small differences don't create duplicates:
+    - convert backslashes to slashes
+    - remove trailing slashes
+    - collapse duplicate slashes
+    - lowercase for stable comparison
+    NOTE: We do NOT call Path.resolve() because the path may not exist.
+    """
+    if not isinstance(p, str):
+        return ""
+    s = p.replace("\\", "/")
+    # collapse multiple slashes
+    while "//" in s:
+        s = s.replace("//", "/")
+    # strip trailing slash (but keep root '/')
+    if len(s) > 1 and s.endswith("/"):
+        s = s.rstrip("/")
+    return s.lower()
+
+
 class ZedWorkspaceSearch(FlowLauncher):
     def _load_workspaces(self):
         if not ZED_DB_PATH.exists():
@@ -32,20 +53,58 @@ class ZedWorkspaceSearch(FlowLauncher):
             rows = cur.fetchall()
             con.close()
 
-            results = {}
+            # Deduplicate by normalized path first (most robust)
+            by_normalized = {}
+            # Also keep a fallback by workspace_id (shortest path)
+            by_workspace_id = {}
+
             for wid, path in rows:
                 if not path or not isinstance(path, str):
                     continue
 
-                # Keep only ONE path per workspace_id (the shortest path is usually the root)
-                if wid not in results or len(path) < len(results[wid]["path"]):
-                    results[wid] = {
+                norm = normalize_path_for_dedupe(path)
+
+                # If we've already seen this normalized path, prefer the earliest record
+                if norm not in by_normalized:
+                    by_normalized[norm] = {
                         "id": wid,
                         "path": path,
+                        "normalized": norm,
+                        "is_wsl": is_wsl_path(path),
+                    }
+                else:
+                    # keep the shortest 'path' string for readability (prefer root-like)
+                    existing = by_normalized[norm]["path"]
+                    if len(path) < len(existing):
+                        by_normalized[norm] = {
+                            "id": wid,
+                            "path": path,
+                            "normalized": norm,
+                            "is_wsl": is_wsl_path(path),
+                        }
+
+                # track shortest path per workspace_id as fallback
+                if wid not in by_workspace_id or len(path) < len(
+                    by_workspace_id[wid]["path"]
+                ):
+                    by_workspace_id[wid] = {
+                        "id": wid,
+                        "path": path,
+                        "normalized": norm,
                         "is_wsl": is_wsl_path(path),
                     }
 
-            return list(results.values())
+            # Prefer the normalized-set (unique paths). If normalized list empty, fallback to workspace ids
+            results = (
+                list(by_normalized.values())
+                if by_normalized
+                else list(by_workspace_id.values())
+            )
+
+            # Sort results by folder name (stable)
+            results.sort(key=lambda r: Path(r["path"]).name.lower())
+
+            return results
 
         except Exception as e:
             return [{"id": -1, "path": f"<Error reading DB: {e}>", "is_wsl": False}]
@@ -69,7 +128,11 @@ class ZedWorkspaceSearch(FlowLauncher):
 
         results = []
         for w in filtered:
-            name = Path(w["path"]).name
+            # Use the path's last part for name
+            try:
+                name = Path(w["path"]).name or w["path"]
+            except Exception:
+                name = w["path"]
 
             # Label WSL workspaces clearly
             if w["is_wsl"]:
@@ -90,7 +153,16 @@ class ZedWorkspaceSearch(FlowLauncher):
                 }
             )
 
-        return results
+        # Final defensive dedupe by Title+SubTitle
+        unique = []
+        seen = set()
+        for r in results:
+            key = (r["Title"].strip().lower(), r["SubTitle"].strip().lower())
+            if key not in seen:
+                seen.add(key)
+                unique.append(r)
+
+        return unique
 
     def open_workspace(self, path):
         """Open workspace respecting Windows vs WSL."""
