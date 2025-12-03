@@ -12,4 +12,5 @@ On Windows, Zed stores workspace data in ```C:\Users\$USER\AppData\Local\Zed\db\
 
 For each query, the plugin parses this sqlite file and serves requests with this data.
 
+Will add caching soon
 
