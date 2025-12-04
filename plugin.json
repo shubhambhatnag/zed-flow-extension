@@ -5,7 +5,7 @@
   "Name": "Zed Workspaces",
   "Description": "Allows search for Zed workspaces, locally or on WSL.",
   "Author": "Shubham Bhatnagar",
-  "Version": "1.3",
+  "Version": "1.5",
   "Language": "python",
   "Website": "https://github.com/shubhambhatnag",
   "ExecuteFileName": "./main.py",
