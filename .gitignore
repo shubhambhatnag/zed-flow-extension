@@ -9,3 +9,4 @@ uv.lock
 # Virtual environments
 .venv
 pyproject.toml
+last_opened.json

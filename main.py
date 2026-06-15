@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import subprocess
 import sys
@@ -10,6 +11,9 @@ from flowlauncher import FlowLauncher
 plugindir = Path.absolute(Path(__file__).parent)
 paths = (".", "lib", "plugin")
 sys.path = [str(plugindir / p) for p in paths] + sys.path
+
+RECENTS_FILE = plugindir / "last_opened.json"
+MAX_RECENTS = 100
 
 
 def is_wsl_path(p: str) -> bool:
@@ -42,6 +46,11 @@ def normalize(p: str) -> str:
     if len(s) > 1 and s.endswith("/"):
         s = s.rstrip("/")
     return s.lower()
+
+
+def recent_key(path, is_ssh=False, ssh_host=None, ssh_user=None, ssh_port=None) -> str:
+    parts = [normalize(path), str(bool(is_ssh)).lower(), str(ssh_host or ""), str(ssh_user or ""), str(ssh_port or "")]
+    return "|".join(parts)
 
 
 class ZedWorkspaceSearch(FlowLauncher):
@@ -148,6 +157,27 @@ class ZedWorkspaceSearch(FlowLauncher):
                 }
             ]
 
+    def _load_recents(self):
+        try:
+            data = json.loads(RECENTS_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        return [item for item in data if isinstance(item, str)] if isinstance(data, list) else []
+
+    def _add_recent(self, path, is_ssh=False, ssh_host=None, ssh_user=None, ssh_port=None):
+        key = recent_key(path, is_ssh, ssh_host, ssh_user, ssh_port)
+        recents = [item for item in self._load_recents() if item != key]
+        recents.append(key)
+        try:
+            RECENTS_FILE.write_text(json.dumps(recents[-MAX_RECENTS:], indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _recent_score(self, path, is_ssh=False, ssh_host=None, ssh_user=None, ssh_port=None):
+        recents = self._load_recents()
+        key = recent_key(path, is_ssh, ssh_host, ssh_user, ssh_port)
+        return (recents.index(key) + 1) * 1000 if key in recents else 0
+
     def query(self, query):
         q = query.lower().strip()
         workspaces = self._load_workspaces()
@@ -189,6 +219,13 @@ class ZedWorkspaceSearch(FlowLauncher):
                     "Title": title,
                     "SubTitle": w["path"],
                     "IcoPath": "assets/zed.png",
+                    "Score": self._recent_score(
+                        w["path"],
+                        w.get("is_ssh", False),
+                        w.get("ssh_host"),
+                        w.get("ssh_user"),
+                        w.get("ssh_port"),
+                    ),
                     "JsonRPCAction": {
                         "method": "open_workspace",
                         "parameters": [
@@ -217,11 +254,13 @@ class ZedWorkspaceSearch(FlowLauncher):
                 seen.add(key)
                 unique.append(r)
 
-        return unique
+        return sorted(unique, key=lambda r: r.get("Score", 0), reverse=True)
 
     def open_workspace(
         self, path, is_ssh=False, ssh_host=None, ssh_user=None, ssh_port=None
     ):
+        self._add_recent(path, is_ssh, ssh_host, ssh_user, ssh_port)
+
         # SSH remote - use zed ssh://[user@]host[:port]/path
         if is_ssh and ssh_host:
             ssh_uri = build_ssh_uri(ssh_host, path, ssh_user, ssh_port)
@@ -280,6 +319,8 @@ class ZedWorkspaceSearch(FlowLauncher):
         self, path, is_ssh=False, ssh_host=None, ssh_user=None, ssh_port=None
     ):
         """Open workspace using the appropriate environment."""
+        self._add_recent(path, is_ssh, ssh_host, ssh_user, ssh_port)
+
         # SSH remote
         if is_ssh and ssh_host:
             ssh_uri = build_ssh_uri(ssh_host, path, ssh_user, ssh_port)
